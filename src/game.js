@@ -265,7 +265,7 @@ function leatherCanvases(total, H) {
     ctx.fillStyle = isBump ? '#101010' : 'rgba(26,11,3,.85)';
     ctx.fillText('BLUFF & CO.', 0, 0);
     ctx.font = 'italic 25px "IM Fell English", Georgia, serif';
-    ctx.fillText('~ est. by the fire ~', 0, 52);
+    ctx.fillText('~ am Lagerfeuer ~', 0, 52);
     ctx.fillRect(-180, -44, 360, 3); ctx.fillRect(-180, 78, 360, 3);
     ctx.restore();
   }
@@ -613,6 +613,17 @@ const sfx = (() => {
       [523, 659, 784, 1047, 1319].forEach((fr, i) => tone(t + 0.05 + i * 0.07, { freq: fr, dur: 1.3, gain: 0.07, type: 'triangle' }));
       tone(t, { freq: 60, end: 35, dur: 0.8, gain: 0.5 });
     },
+    busted() {
+      const t = now();
+      const f = burst(t, { dur: 0.5, type: 'lowpass', freq: 500, q: 0.6, gain: 0.4, attack: 0.02 });
+      f.frequency.setValueAtTime(600, t); f.frequency.exponentialRampToValueAtTime(90, t + 0.5);
+      tone(t, { freq: 180, end: 70, dur: 0.45, gain: 0.4, type: 'sawtooth' });
+      tone(t + 0.16, { freq: 140, end: 55, dur: 0.4, gain: 0.32, type: 'sawtooth' });
+    },
+    truth() {
+      const t = now();
+      [784, 988, 1175].forEach((f, i) => tone(t + i * 0.09, { freq: f, dur: 0.55, gain: 0.08, type: 'triangle' }));
+    },
     knock() {
       const t = now();
       burst(t, { dur: 0.05, freq: 700, q: 4, gain: 0.16 });
@@ -697,35 +708,120 @@ function updateCamera(dt, t) {
 const addTrauma = (a) => { rig.trauma = Math.min(1, rig.trauma + a); wake(); };
 
 /* =========================================================================
-   Game state & choreography
+   Game state — Mäxchen / Schummelmäx rules
+   ---------------------------------------------------------------------------
+   Phases of the current holder's turn:
+     start    round opener: nothing announced yet, must roll
+     respond  received a closed cup with an announcement: Glauben & würfeln, or Aufdecken
+     rolled   rolled, must look privately before announcing
+     peeked   looked; picks an announcement (optionally one blind reroll)
+     blind    rerolled blind; must announce without looking
+     result   cup was lifted; verdict shown, loser starts the next round
    ========================================================================= */
-const state = { values: null, revealed: false, busy: false, player: 1, sheet: 'start', lastAction: 0 };
+const state = {
+  values: null, revealed: false, peeking: false, busy: false, sheet: 'start', lastAction: 0,
+  players: [], scores: [], holder: 0,
+  phase: 'idle',
+  callIdx: -1, callBy: -1, pendingIdx: 0,
+  blindUsed: false, loser: -1,
+};
+window.__fb = state; // read-only hook for automated tests
+const settings = { blind: false };
+try { settings.blind = localStorage.getItem('fb-blind') === '1'; } catch (e) { /* private mode */ }
+
 const CUP_HOME = new V3(0, 0, 0);
 const REVEAL_POS = new V3(0.25, 1.68, -1.45);
 const REVEAL_Q = new Q().setFromEuler(new THREE.Euler(-(Math.PI / 2 + 0.09), 0.28, 0, 'YXZ'));
+// secret peek: the cup tips back on its rear rim so only the holder sees underneath
+const PEEK_TILT = -1.0;
+const PEEK_Q = new Q().setFromEuler(new THREE.Euler(PEEK_TILT, 0, 0));
+const PEEK_POS = new V3(0, -CUP.rB * Math.sin(PEEK_TILT), -CUP.rB + CUP.rB * Math.cos(PEEK_TILT));
 
-const btn = { roll: $('rollBtn'), reveal: $('revealBtn'), pass: $('passBtn') };
+const name = (i) => state.players[i] || `Spieler ${i + 1}`;
+const nextOf = (i) => (i + 1) % state.players.length;
+
+/* ---------------- ladder (Rangfolge) ----------------
+   lowest → highest: 31,32,41,42,43,51…54,61…65, Pasch 11…66, Mäxchen (21). */
+const ZEHNER = { 3: 'dreißig', 4: 'vierzig', 5: 'fünfzig', 6: 'sechzig' };
+const EINER = { 1: 'ein', 2: 'zwei', 3: 'drei', 4: 'vier', 5: 'fünf' };
+const PASCH = { 1: 'Einer', 2: 'Zweier', 3: 'Dreier', 4: 'Vierer', 5: 'Fünfer', 6: 'Sechser' };
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const BASE_FOR_HI = { 3: 0, 4: 2, 5: 5, 6: 9 };
+const LADDER = [];
+for (let hi = 3; hi <= 6; hi++) for (let lo = 1; lo < hi; lo++) LADDER.push({ mia: false, pasch: false, digits: `${hi}${lo}`, label: cap(`${EINER[lo]}und${ZEHNER[hi]}`) });
+const PLAIN_COUNT = LADDER.length;
+for (let v = 1; v <= 6; v++) LADDER.push({ mia: false, pasch: true, digits: `${v}${v}`, label: `${PASCH[v]}pasch` });
+LADDER.push({ mia: true, pasch: false, digits: '21', label: 'Mäxchen' });
+const MIA_IDX = LADDER.length - 1;
+function ladderIndex(a, b) {
+  const hi = Math.max(a, b), lo = Math.min(a, b);
+  if (hi === 2 && lo === 1) return MIA_IDX;
+  if (hi === lo) return PLAIN_COUNT + (hi - 1);
+  return BASE_FOR_HI[hi] + (lo - 1);
+}
+const short = (i) => (LADDER[i].mia ? 'Mäxchen' : LADDER[i].digits);
+// after a believed Mäxchen the only legal announcement is Mäxchen again
+const minCall = () => (state.callIdx === MIA_IDX ? MIA_IDX : state.callIdx + 1);
+
+/* ---------------- DOM ---------------- */
+const btn = { roll: $('rollBtn'), reveal: $('revealBtn'), peek: $('peekBtn'), blind: $('blindBtn'), next: $('nextBtn') };
 const hintEl = $('hint');
+const callBar = $('callBar'), callValueEl = $('callValue'), callWordEl = $('callWord'), callBeatEl = $('callBeat');
+const callMinus = $('callMinus'), callPlus = $('callPlus'), callConfirm = $('callConfirm');
+const seatEl = $('seat'), lastCallPill = $('lastCallPill');
 function setHint(s) { hintEl.textContent = s; }
+
 function setButtons() {
-  btn.roll.disabled = state.busy;
-  btn.reveal.disabled = state.busy || state.revealed || !state.values;
-  btn.pass.disabled = state.busy || !state.values;
-  btn.reveal.querySelector('span').textContent = state.revealed ? 'Revealed' : 'Reveal';
+  const ph = state.phase;
+  const show = {
+    roll: ph === 'start' || ph === 'respond',
+    reveal: ph === 'respond',
+    peek: ph === 'rolled',
+    blind: ph === 'peeked' && settings.blind && !state.blindUsed,
+    next: ph === 'result',
+  };
+  for (const k in btn) { btn[k].hidden = !show[k]; btn[k].disabled = state.busy; }
+  btn.roll.querySelector('span').textContent = ph === 'respond' ? 'Glauben & würfeln' : 'Würfeln';
+  btn.roll.classList.toggle('primary', ph === 'start');
+  refreshCallBar();
+  refreshHud();
 }
 
+function refreshHud() {
+  seatEl.textContent = state.players.length ? `${name(state.holder)} ist dran` : '';
+  if (state.callIdx === -1 || state.phase === 'result') { lastCallPill.classList.remove('show'); return; }
+  lastCallPill.textContent = `Ansage: ${short(state.callIdx)} · von ${name(state.callBy)}`;
+  lastCallPill.classList.add('show');
+}
+
+function refreshCallBar() {
+  const open = (state.phase === 'peeked' || state.phase === 'blind') && !state.sheet;
+  callBar.classList.toggle('show', open);
+  if (!open) return;
+  const lo = minCall();
+  state.pendingIdx = clamp(state.pendingIdx, lo, MIA_IDX);
+  const e = LADDER[state.pendingIdx];
+  callValueEl.textContent = e.mia ? '21' : e.digits;
+  callWordEl.textContent = e.label;
+  callBeatEl.textContent = state.callIdx === -1 ? 'Eröffnung – freie Wahl'
+    : state.callIdx === MIA_IDX ? 'Nach Mäxchen geht nur Mäxchen'
+    : `Muss ${short(state.callIdx)} schlagen`;
+  callMinus.disabled = state.busy || state.pendingIdx <= lo;
+  callPlus.disabled = state.busy || state.pendingIdx >= MIA_IDX;
+  callConfirm.disabled = state.busy;
+}
+
+/* ---------------- juice helpers ---------------- */
 function squashSpring(amount = 0.12) {
   return tween(0.5, (_, p) => {
     const e = Math.exp(-p * 6) * Math.cos(p * 20);
     squash.scale.set(1 + amount * 0.5 * e, 1 - amount * e, 1 + amount * 0.5 * e);
   }, ease.linear);
 }
-
 function jolt() {
   if (reduceMotion) return;
   document.body.classList.remove('jolt'); void document.body.offsetWidth; document.body.classList.add('jolt');
 }
-
 function impact(strength = 1) {
   sfx.slam(strength);
   addTrauma(0.55 * strength);
@@ -736,7 +832,6 @@ function impact(strength = 1) {
   jolt();
   buzz(strength > 0.7 ? [35, 25, 15] : 20);
 }
-
 function placeDice() {
   const cfg = [
     [-0.62 + rand(-0.1, 0.08), rand(-0.05, 0.2)],
@@ -749,24 +844,28 @@ function placeDice() {
     d.visible = true;
   });
 }
-
 async function slamDown(strength = 1) {
   const p0 = cup.position.clone(), q0 = cup.quaternion.clone();
   const qEnd = new Q().setFromAxisAngle(UP, rand(-0.25, 0.25));
   await tween(0.13, (t) => { cup.position.lerpVectors(p0, CUP_HOME, t); cup.quaternion.slerpQuaternions(q0, qEnd, t); }, ease.inCubic);
   impact(strength);
 }
-
 function focusTo(v, dur = 0.7) {
   const f0 = rig.focus;
   return tween(dur, (t) => { rig.focus = lerp(f0, v, t); }, ease.inOutCubic);
 }
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+function begin() { state.busy = true; state.lastAction = performance.now(); setButtons(); }
+function done() { state.busy = false; state.lastAction = performance.now(); setButtons(); }
 
+/* ---------------- roll ---------------- */
 async function roll() {
-  if (state.busy || state.sheet) return;
-  state.busy = true; state.lastAction = performance.now(); setButtons(); hideCallout();
-  const fromRevealed = state.revealed;
-  state.revealed = false;
+  const ph = state.phase;
+  const blindReroll = ph === 'peeked' && settings.blind && !state.blindUsed;
+  if (state.busy || state.sheet || !(ph === 'start' || ph === 'respond' || blindReroll)) return;
+  begin(); hideCallout();
+  const fromRevealed = state.revealed || state.peeking;
+  state.revealed = false; state.peeking = false;
   if (fromRevealed) focusTo(0, 0.5);
 
   // swoop the cup up and scoop the dice in
@@ -802,13 +901,96 @@ async function roll() {
   state.values = window.__forceRoll || [d6(), d6()];
   placeDice();
   await slamDown(1);
-  state.busy = false; state.lastAction = performance.now(); setButtons();
-  setHint('Peek with Reveal, or pass it on hidden.');
+  if (blindReroll) {
+    state.blindUsed = true;
+    state.phase = 'blind';
+    setHint('Unbesehen – sag trotzdem etwas an.');
+  } else {
+    state.phase = 'rolled';
+    state.pendingIdx = minCall();
+    setHint('Schau heimlich unter den Becher – nur du!');
+  }
+  done();
 }
 
-async function reveal() {
-  if (state.busy || state.revealed || !state.values || state.sheet) return;
-  state.busy = true; state.lastAction = performance.now(); setButtons();
+/* ---------------- secret peek ---------------- */
+async function peek() {
+  if (state.busy || state.sheet || state.phase !== 'rolled') return;
+  begin();
+  buzz(10);
+  sfx.swoosh();
+  focusTo(0.35, 0.5);
+  const p0 = cup.position.clone(), q0 = cup.quaternion.clone();
+  await tween(0.45, (t) => { cup.position.lerpVectors(p0, PEEK_POS, t); cup.quaternion.slerpQuaternions(q0, PEEK_Q, t); }, ease.outBack);
+  state.peeking = true;
+  showRoll();
+  state.phase = 'peeked';
+  setHint(state.callIdx === MIA_IDX ? 'Nach Mäxchen bleibt nur: Mäxchen ansagen.' : 'Wähle deine Ansage – wahr oder gelogen.');
+  done();
+}
+
+async function coverDown(strength = 0.5) {
+  hideCallout(); focusTo(0, 0.5);
+  const p0 = cup.position.clone(), q0 = cup.quaternion.clone();
+  const pMid = new V3(0, state.revealed ? 2.4 : 0.9, 0.1), qMid = new Q().setFromEuler(new THREE.Euler(0.15, 0, 0));
+  sfx.swoosh();
+  await tween(state.revealed ? 0.36 : 0.22, (t) => { cup.position.lerpVectors(p0, pMid, t); cup.quaternion.slerpQuaternions(q0, qMid, t); }, ease.inOutCubic);
+  await slamDown(strength);
+  state.revealed = false; state.peeking = false;
+}
+
+/* ---------------- announce & pass ---------------- */
+async function announce() {
+  if (state.busy || state.sheet || !(state.phase === 'peeked' || state.phase === 'blind')) return;
+  begin();
+  state.callIdx = state.pendingIdx;
+  state.callBy = state.holder;
+  sfx.glint(); buzz(15);
+  if (state.peeking || state.revealed) await coverDown(0.5);
+  else sfx.knock();
+  const nx = nextOf(state.holder);
+  sfx.swoosh();
+  const o0 = rig.orbit;
+  tween(0.7, (t) => { rig.orbit = lerp(o0, 0.75, t); }, ease.inCubic);
+  $('passEyebrow').textContent = 'Gib den Becher an';
+  $('passTo').textContent = name(nx);
+  $('passCall').textContent = `${name(state.holder)} sagt an: ${short(state.callIdx)}${LADDER[state.callIdx].mia ? '!' : ` – ${LADDER[state.callIdx].label}`}`;
+  $('passNote').textContent = 'Nicht hinschauen, bis der Becher bei dir ist.';
+  $('takeBtn').querySelector('span').textContent = 'Ich hab den Becher';
+  state.phase = 'handoff';
+  await wait(250);
+  openSheet('pass');
+  done();
+}
+
+function takeCup() {
+  if (state.sheet !== 'pass') return;
+  closeSheet();
+  sfx.knock();
+  rig.orbit = -0.75;
+  tween(0.9, (t) => { rig.orbit = lerp(-0.75, 0, t); }, ease.outCubic);
+  if (state.phase === 'handoff') {
+    state.holder = nextOf(state.holder);
+    state.phase = 'respond';
+    state.blindUsed = false;
+    const c = LADDER[state.callIdx];
+    setHint(c.mia
+      ? `${name(state.callBy)} sagt Mäxchen! Aufdecken – oder glauben und selbst Mäxchen würfeln.`
+      : `${name(state.callBy)} sagt ${short(state.callIdx)}. Glauben oder aufdecken?`);
+  } else { // new round
+    state.holder = state.loser;
+    state.phase = 'start';
+    state.callIdx = -1; state.callBy = -1; state.blindUsed = false;
+    hideCallout();
+    setHint(`${name(state.holder)} eröffnet – würfeln!`);
+  }
+  setButtons();
+}
+
+/* ---------------- Aufdecken: the challenge ---------------- */
+async function challenge() {
+  if (state.busy || state.sheet || state.phase !== 'respond') return;
+  begin();
   buzz(10);
   await tween(0.12, (t) => squash.scale.set(1 + 0.04 * t, 1 - 0.08 * t, 1 + 0.04 * t), ease.outCubic);
   sfx.swoosh();
@@ -821,7 +1003,14 @@ async function reveal() {
     squash.scale.set(lerp(1.04, 1, p) - st * 0.5, lerp(0.92, 1, p) + st, lerp(1.04, 1, p) - st * 0.5);
   }, ease.outCubic);
   squash.scale.setScalar(1);
-  showCallout();
+
+  const actual = ladderIndex(...state.values);
+  const truthful = actual >= state.callIdx;
+  const points = state.callIdx === MIA_IDX ? 2 : 1;
+  state.loser = truthful ? state.holder : state.callBy;
+  state.scores[state.loser] += points;
+  showVerdict(truthful, actual, points);
+
   let landed = false;
   await tween(0.62, (_, p) => {
     const e = ease.outCubic(p);
@@ -834,70 +1023,86 @@ async function reveal() {
       dustRing(14, new V3(REVEAL_POS.x, 0, REVEAL_POS.z - 1.4), 1.3, 0.6);
     }
   }, ease.linear);
-  state.revealed = true; state.busy = false; state.lastAction = performance.now(); setButtons();
-  setHint('Roll again, or pass it on hidden.');
+  state.revealed = true;
+  state.phase = 'result';
+  setHint(`${name(state.loser)} bekommt ${points === 2 ? 'zwei Strafpunkte' : 'einen Strafpunkt'}.`);
+  done();
 }
 
-async function coverFromRevealed() {
-  sfx.swoosh(); focusTo(0, 0.6); hideCallout();
-  const p0 = cup.position.clone(), q0 = cup.quaternion.clone();
-  const pMid = new V3(0, 2.4, 0.1), qMid = new Q().setFromEuler(new THREE.Euler(0.2, 0, 0));
-  await tween(0.36, (t) => { cup.position.lerpVectors(p0, pMid, t); cup.quaternion.slerpQuaternions(q0, qMid, t); }, ease.inOutCubic);
-  await slamDown(0.6);
-  state.revealed = false;
-}
-
-async function pass() {
-  if (state.busy || !state.values || state.sheet) return;
-  state.busy = true; state.lastAction = performance.now(); setButtons();
-  if (state.revealed) await coverFromRevealed();
-  else sfx.knock();
-  state.player++;
-  sfx.swoosh();
-  const o0 = rig.orbit;
-  tween(0.7, (t) => { rig.orbit = lerp(o0, 0.75, t); }, ease.inCubic);
-  $('passTo').textContent = `Player ${state.player}`;
-  await wait(250);
-  openSheet('pass');
-  state.busy = false;
-}
-
-function takeCup() {
-  closeSheet();
+function newRound() {
+  if (state.busy || state.phase !== 'result') return;
   sfx.knock();
-  $('seat').textContent = `Player ${state.player}’s cup`;
-  rig.orbit = -0.75;
-  tween(0.9, (t) => { rig.orbit = lerp(-0.75, 0, t); }, ease.outCubic);
-  setHint('Believe the call? Roll. Doubt it? Reveal.');
-  setButtons();
+  renderScores();
+  $('scoreNote').textContent = `${name(state.loser)} eröffnet die neue Runde.`;
+  $('scoreBtn').querySelector('span').textContent = 'Los geht’s';
+  $('scoreBtn').dataset.mode = 'round';
+  openSheet('scores');
 }
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ---------------- scoreboard ---------------- */
+function tally(n) {
+  let s = '';
+  for (let i = 0; i < n; i++) s += (i % 5 === 4) ? '<i class="slash"></i>' : '<i></i>';
+  return s || '<span class="clean">–</span>';
+}
+function renderScores() {
+  const order = state.players.map((_, i) => i);
+  $('scoreList').innerHTML = order.map((i) => `
+    <li class="${i === state.loser && state.phase === 'result' ? 'hit' : ''}${i === state.holder ? ' now' : ''}">
+      <span class="who">${escapeHtml(name(i))}</span>
+      <span class="marks">${tally(state.scores[i])}</span>
+      <span class="num">${state.scores[i]}</span>
+    </li>`).join('');
+}
+function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+$('scoreBtn').addEventListener('click', () => {
+  if ($('scoreBtn').dataset.mode === 'round') {
+    // hand the cup to the loser, who opens the next round
+    $('passEyebrow').textContent = 'Neue Runde – der Becher geht an';
+    $('passTo').textContent = name(state.loser);
+    $('passCall').textContent = 'Wer verliert, eröffnet.';
+    $('passNote').textContent = '';
+    $('takeBtn').querySelector('span').textContent = 'Los geht’s';
+    state.phase = 'newround';
+    openSheet('pass');
+  } else {
+    closeSheet(); setButtons();
+  }
+});
+seatEl.addEventListener('click', () => {
+  if (state.busy || state.sheet || !state.players.length) return;
+  sfx.knock();
+  renderScores();
+  $('scoreNote').textContent = '';
+  $('scoreBtn').querySelector('span').textContent = 'Zurück ans Feuer';
+  $('scoreBtn').dataset.mode = 'view';
+  openSheet('scores');
+});
 
 /* ---------------- callout ---------------- */
-const TENS = { 3: 'Thirty', 4: 'Forty', 5: 'Fifty', 6: 'Sixty' };
-const ONES = { 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six' };
-const PLURAL = { 1: 'ones', 2: 'twos', 3: 'threes', 4: 'fours', 5: 'fives', 6: 'sixes' };
-function describe(a, b) {
-  const hi = Math.max(a, b), lo = Math.min(a, b);
-  if (hi === 2 && lo === 1) return { big: 'MIA!', small: 'Two & one — nothing beats it', kind: 'mia' };
-  if (hi === lo) return { big: `${hi}${lo}`, small: `Double ${PLURAL[hi]}`, kind: 'double' };
-  return { big: `${hi}${lo}`, small: `${TENS[hi]}-${ONES[lo]}`, kind: 'plain' };
-}
-function showCallout() {
-  const d = describe(...state.values);
-  const big = $('calloutBig');
-  big.innerHTML = [...d.big].map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('');
-  $('calloutSmall').textContent = d.small;
+function paintCallout(bigText, smallText, cls) {
+  $('calloutBig').innerHTML = [...bigText].map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('');
+  $('calloutSmall').textContent = smallText;
   ui.callout.className = '';
   void ui.callout.offsetWidth;
-  ui.callout.className = `show ${d.kind}`;
+  ui.callout.className = `show ${cls}`;
+}
+function showRoll() {
+  const e = LADDER[ladderIndex(...state.values)];
+  paintCallout(e.mia ? 'MÄXCHEN!' : e.digits, e.mia ? 'Zwei & eins – nichts ist höher' : e.label, e.mia ? 'mia' : e.pasch ? 'double' : 'plain');
+  glintSweep(); sfx.glint();
+  if (e.mia) { sfx.mia(); fountain(170, 1.1); surge(2.1, 1.6); addTrauma(0.45); buzz([60, 40, 60, 40, 120]); }
+  else if (e.pasch) { sfx.doubles(); fountain(70, 0.8); surge(1.5, 1); buzz([30, 30, 30]); }
+}
+function showVerdict(truthful, actual, points) {
+  const said = short(state.callIdx), was = short(actual);
+  paintCallout(truthful ? 'STIMMT!' : 'GELOGEN!',
+    truthful ? `${name(state.callBy)} sagte ${said} – es ist ${was}` : `${name(state.callBy)} sagte ${said} – nur ${was}`,
+    truthful ? 'truth' : 'busted');
   glintSweep();
-  sfx.glint();
-  if (d.kind === 'mia') {
-    sfx.mia(); fountain(170, 1.1); surge(2.1, 1.6); addTrauma(0.45); buzz([60, 40, 60, 40, 120]);
-  } else if (d.kind === 'double') {
-    sfx.doubles(); fountain(70, 0.8); surge(1.5, 1); buzz([30, 30, 30]);
-  }
+  if (truthful) { sfx.truth(); fountain(50, 0.6); buzz(30); }
+  else { sfx.busted(); addTrauma(0.35); buzz([80, 60, 80]); }
+  if (points === 2) surge(1.8, 1.2);
 }
 function hideCallout() { ui.callout.className = ''; }
 
@@ -914,6 +1119,7 @@ function surge(peak, dur) {
 function openSheet(name) {
   state.sheet = name;
   document.querySelectorAll('.sheet').forEach((s) => s.classList.toggle('open', s.dataset.sheet === name));
+  refreshCallBar();
   requestRender();
 }
 function closeSheet() {
@@ -922,27 +1128,90 @@ function closeSheet() {
   wake();
 }
 
+/* ---------------- player setup ---------------- */
+const playerList = $('playerList');
+let draftNames = ['Spieler 1', 'Spieler 2', 'Spieler 3'];
+try { const saved = JSON.parse(localStorage.getItem('fb-players') || 'null'); if (Array.isArray(saved) && saved.length >= 2) draftNames = saved.slice(0, 8); } catch (e) { /* ignore */ }
+function renderSetup() {
+  playerList.innerHTML = draftNames.map((n, i) => `
+    <li><input type="text" maxlength="14" value="${escapeHtml(n)}" data-i="${i}" aria-label="Name von Spieler ${i + 1}" autocomplete="off" enterkeyhint="done">
+    <button class="remove" data-i="${i}" aria-label="Spieler entfernen" ${draftNames.length <= 2 ? 'disabled' : ''}>×</button></li>`).join('');
+  $('addPlayer').disabled = draftNames.length >= 8;
+}
+playerList.addEventListener('input', (e) => { if (e.target.dataset.i != null) draftNames[+e.target.dataset.i] = e.target.value; });
+playerList.addEventListener('click', (e) => {
+  if (!e.target.classList.contains('remove')) return;
+  draftNames.splice(+e.target.dataset.i, 1); renderSetup();
+});
+$('addPlayer').addEventListener('click', () => {
+  if (draftNames.length >= 8) return;
+  draftNames.push(`Spieler ${draftNames.length + 1}`); renderSetup();
+  const inputs = playerList.querySelectorAll('input'); inputs[inputs.length - 1].select();
+});
+renderSetup();
+
+function startGame() {
+  state.players = draftNames.map((n, i) => n.trim() || `Spieler ${i + 1}`);
+  try { localStorage.setItem('fb-players', JSON.stringify(state.players)); } catch (e) { /* ignore */ }
+  state.scores = state.players.map(() => 0);
+  state.holder = 0; state.phase = 'start';
+  state.callIdx = -1; state.callBy = -1; state.blindUsed = false; state.loser = -1;
+  hideCallout();
+  if (state.revealed || state.peeking) coverDown(0.4);
+  closeSheet();
+  setHint(`${name(0)} eröffnet – würfeln oder Handy schütteln!`);
+  setButtons();
+}
+
 /* =========================================================================
-   Input: buttons, tilt parallax, shake-to-roll
+   Input
    ========================================================================= */
 btn.roll.addEventListener('click', roll);
-btn.reveal.addEventListener('click', reveal);
-btn.pass.addEventListener('click', pass);
+btn.blind.addEventListener('click', roll);
+btn.reveal.addEventListener('click', challenge);
+btn.peek.addEventListener('click', peek);
+btn.next.addEventListener('click', newRound);
+callMinus.addEventListener('click', () => { if (state.busy) return; state.pendingIdx--; refreshCallBar(); sfx.knock(); });
+callPlus.addEventListener('click', () => { if (state.busy) return; state.pendingIdx++; refreshCallBar(); sfx.knock(); });
+callConfirm.addEventListener('click', announce);
+const pickerGrid = $('pickerGrid');
+$('callValueBtn').addEventListener('click', () => {
+  if (state.busy || state.sheet || !(state.phase === 'peeked' || state.phase === 'blind')) return;
+  const lo = minCall();
+  pickerGrid.innerHTML = LADDER.map((e, i) =>
+    `<button class="chip${e.pasch ? ' pasch' : ''}${e.mia ? ' mia' : ''}${i === state.pendingIdx ? ' sel' : ''}" data-i="${i}" ${i < lo ? 'disabled' : ''} aria-label="${e.label}">${e.mia ? 'Mäx' : e.digits}</button>`).join('');
+  sfx.knock();
+  openSheet('picker');
+});
+pickerGrid.addEventListener('click', (e) => {
+  const c = e.target.closest('.chip');
+  if (!c || c.disabled) return;
+  state.pendingIdx = +c.dataset.i;
+  sfx.knock(); closeSheet(); setButtons();
+});
+$('pickerClose').addEventListener('click', () => { closeSheet(); setButtons(); });
 $('takeBtn').addEventListener('click', takeCup);
-$('rulesBtn').addEventListener('click', () => { sfx.knock(); openSheet('rules'); });
-$('rulesClose').addEventListener('click', () => { closeSheet(); });
+$('rulesBtn').addEventListener('click', () => { if (state.sheet && state.sheet !== 'start') return; sfx.knock(); openSheet('rules'); });
+$('rulesClose').addEventListener('click', () => { closeSheet(); if (!state.players.length) openSheet('start'); setButtons(); });
+$('newGameBtn').addEventListener('click', () => { renderSetup(); openSheet('start'); });
+const blindToggle = $('blindToggle');
+blindToggle.checked = settings.blind;
+blindToggle.addEventListener('change', () => {
+  settings.blind = blindToggle.checked;
+  try { localStorage.setItem('fb-blind', settings.blind ? '1' : '0'); } catch (e) { /* ignore */ }
+});
 const soundBtn = $('soundBtn');
-function paintSound() { soundBtn.classList.toggle('off', sfx.muted); soundBtn.setAttribute('aria-label', sfx.muted ? 'Turn sound on' : 'Mute sound'); }
+function paintSound() { soundBtn.classList.toggle('off', sfx.muted); soundBtn.setAttribute('aria-label', sfx.muted ? 'Ton an' : 'Ton aus'); }
 soundBtn.addEventListener('click', () => { sfx.unlock(); sfx.setMuted(!sfx.muted); paintSound(); });
 paintSound();
 
-// tap the cup to peek
+// tap the cup: only ever the private peek — never an accidental Aufdecken
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 canvas.addEventListener('pointerup', (e) => {
-  if (state.sheet || state.busy || state.revealed || !state.values) return;
+  if (state.sheet || state.busy || state.phase !== 'rolled') return;
   ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  if (ray.intersectObject(cup, true).length) reveal();
+  if (ray.intersectObject(cup, true).length) peek();
 });
 
 // mouse parallax (desktop)
@@ -971,7 +1240,7 @@ function onMotion(e) {
   if (!a || a.x == null) return;
   const m = Math.hypot(a.x, a.y, a.z);
   shakeScore = m > 16 ? shakeScore + 1 : Math.max(0, shakeScore - 0.2);
-  if (shakeScore >= 5 && !state.busy && !state.sheet && performance.now() - state.lastAction > 1500) {
+  if (shakeScore >= 5 && !state.busy && !state.sheet && (state.phase === 'start' || state.phase === 'respond') && performance.now() - state.lastAction > 1500) {
     shakeScore = 0; roll();
   }
 }
@@ -987,14 +1256,13 @@ function enableMotion() {
   }).catch(() => { /* motion is optional */ });
 }
 
+let motionAsked = false;
 $('startBtn').addEventListener('click', () => {
   sfx.unlock();
   sfx.ambient();
-  enableMotion();
-  closeSheet();
+  if (!motionAsked) { motionAsked = true; enableMotion(); }
   sfx.knock();
-  setButtons();
-  setHint('Tap Roll — or shake your phone.');
+  startGame();
 });
 
 /* =========================================================================
@@ -1090,6 +1358,6 @@ async function boot() {
   requestRender();
   document.body.classList.add('ready');
   $('startBtn').disabled = false;
-  $('startBtn').querySelector('span').textContent = 'Light the fire';
+  $('startBtn').querySelector('span').textContent = 'Feuer anzünden';
 }
 boot();

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-<title>Fireside Bluff</title>
-<meta name="description" content="A 3D dice-bluffing game for the campfire. Shake the leather cup, call your roll, and decide whether to reveal, roll again, or pass it on hidden.">
+<title>Schummelmäx</title>
+<meta name="description" content="Mäxchen am Lagerfeuer: Becher schütteln, heimlich schauen, ansagen – und hoffen, dass keiner aufdeckt.">
 <meta name="theme-color" content="#0b0604">
 <meta name="color-scheme" content="dark">
 <link rel="manifest" href="manifest.webmanifest">
@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Fireside Bluff">
+<meta name="apple-mobile-web-app-title" content="Schummelmäx">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -73,13 +73,18 @@
     -webkit-background-clip:text;background-clip:text;color:transparent;
     filter:drop-shadow(0 2px 0 #4a2708) drop-shadow(0 6px 14px rgba(0,0,0,.9));
   }
-  .seat{
+  .seat, .pill{
     margin:6px auto 0;width:max-content;padding:3px 12px 4px;border-radius:99px;
     font-style:italic;font-size:15px;color:#f0d6a6;
     background:linear-gradient(180deg,rgba(60,32,12,.75),rgba(30,14,4,.75));
     border:1px solid rgba(255,200,130,.18);
     box-shadow:inset 0 1px 0 rgba(255,220,170,.12),0 4px 12px rgba(0,0,0,.5);
   }
+  .pill.last-call{
+    display:none;font-style:normal;font-size:13px;color:var(--flame);
+    border-color:rgba(255,180,90,.3);white-space:nowrap;max-width:78vw;overflow:hidden;text-overflow:ellipsis;
+  }
+  .pill.last-call.show{display:table}
   .icon-btn{
     width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;
     display:grid;place-items:center;color:#f3d9a8;
@@ -123,6 +128,17 @@
     filter:drop-shadow(0 3px 0 #5a1a04) drop-shadow(0 0 30px rgba(255,120,20,.9));
   }
   #callout.double .big span{filter:drop-shadow(0 3px 0 #5a2c08) drop-shadow(0 0 30px rgba(255,200,90,.8))}
+  #callout.busted .big span{
+    background:linear-gradient(180deg,#ffd8c8 0%,#ff6a4a 45%,#8a1a10 100%);
+    -webkit-background-clip:text;background-clip:text;
+    filter:drop-shadow(0 3px 0 #4a0c04) drop-shadow(0 0 26px rgba(255,60,30,.75));
+  }
+  #callout.truth .big span{
+    background:linear-gradient(180deg,#e6ffe0 0%,#a8e888 45%,#4a9a2e 100%);
+    -webkit-background-clip:text;background-clip:text;
+    filter:drop-shadow(0 3px 0 #143a08) drop-shadow(0 0 26px rgba(140,230,90,.6));
+  }
+  #callout.busted .small, #callout.truth .small{font-size:clamp(15px,4.2vw,19px)}
   @keyframes pop{
     0%{opacity:0;transform:translateY(30px) scale(.3) rotate(-12deg)}
     100%{opacity:1;transform:none}
@@ -139,7 +155,34 @@
     box-shadow:0 2px 10px rgba(0,0,0,.35);
   }
   .hint:empty{visibility:hidden}
+
   .actions{display:flex;gap:12px;max-width:460px;margin:0 auto}
+  .actions .plaque{min-width:0}
+  #callBar{
+    max-width:460px;margin:0 auto 12px;padding:10px 12px;border-radius:16px;
+    background:linear-gradient(180deg,rgba(50,26,10,.85),rgba(24,12,4,.9));
+    border:1px solid rgba(255,190,110,.2);box-shadow:0 8px 20px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,220,170,.1);
+    display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px 14px;
+    max-height:0;opacity:0;overflow:hidden;padding-top:0;padding-bottom:0;border-width:0;margin-bottom:0;
+    transition:max-height .3s ease, opacity .25s ease, padding .3s ease, margin .3s ease, border-width .3s ease;
+  }
+  #callBar.show{max-height:120px;opacity:1;padding:10px 12px;margin-bottom:12px;border-width:1px}
+  .callbar-beat{grid-column:1/-1;font-style:italic;font-size:13.5px;color:var(--muted);text-align:center}
+  .callbar-stepper{display:flex;align-items:center;justify-content:center;gap:10px}
+  .stepper{
+    width:38px;height:38px;border-radius:10px;border:none;cursor:pointer;flex:none;
+    font-family:'Rye',serif;font-size:22px;line-height:1;color:#f7e2b6;
+    background:linear-gradient(180deg,var(--wood-hi),var(--wood-lo));
+    box-shadow:inset 0 1px 0 rgba(255,220,170,.3),0 3px 6px rgba(0,0,0,.5);
+  }
+  .stepper:active{transform:translateY(1px)}
+  .stepper:disabled{opacity:.3;pointer-events:none}
+  .callbar-value{
+    min-width:64px;text-align:center;font-family:'Rye',serif;font-size:26px;color:var(--gold);
+    text-shadow:0 2px 0 #4a2708,0 0 12px rgba(255,160,60,.35);
+  }
+  #callConfirm{flex:none;min-height:44px;padding:0 18px;border-radius:12px;font-size:15px;width:auto}
+  #callConfirm::after{border-radius:14px}
   .plaque{
     --lift:6px;
     position:relative;flex:1;min-height:74px;border:none;border-radius:16px;cursor:pointer;
@@ -222,6 +265,73 @@
     border:1px solid rgba(255,200,130,.15);font-size:16px;line-height:1.5}
   .rank b{font-family:'Rye',serif;font-weight:400;color:var(--gold)}
 
+
+  .plaque[hidden]{display:none}
+  button.seat{display:block;cursor:pointer;font-family:inherit;border-style:solid}
+  button.seat:empty{visibility:hidden}
+  .callbar-value{display:flex;flex-direction:column;align-items:center;line-height:1}
+  .callbar-word{font-family:'IM Fell English',Georgia,serif;font-style:italic;font-size:13px;color:var(--parch);text-shadow:none;margin-top:3px}
+  #callout.mia .big, #callout.busted .big, #callout.truth .big{font-size:clamp(46px,15vw,92px)}
+
+  .sheet{overflow-y:auto;justify-content:safe center}
+  .players{list-style:none;margin:18px auto 0;max-width:300px;display:grid;gap:8px;counter-reset:p}
+  .players li{display:flex;gap:8px;align-items:center;counter-increment:p}
+  .players li::before{content:counter(p);font-family:'Rye',serif;color:var(--flame);width:18px;text-align:right}
+  .players input{
+    flex:1;min-width:0;padding:10px 12px;border-radius:10px;font:inherit;font-size:17px;color:#fbe9c6;
+    background:rgba(20,9,3,.75);border:1px solid rgba(255,200,130,.22);user-select:text;-webkit-user-select:text;
+  }
+  .players input:focus{outline:2px solid var(--flame);outline-offset:1px}
+  .players .remove{width:36px;height:36px;border-radius:50%;border:none;cursor:pointer;font-size:20px;color:#f3d9a8;
+    background:rgba(60,30,10,.8)}
+  .players .remove:disabled{opacity:.25}
+  .add{margin:10px auto 0;display:block;background:none;border:1px dashed rgba(255,200,130,.35);color:var(--flame);
+    font:inherit;font-size:16px;padding:8px 16px;border-radius:10px;cursor:pointer}
+  .add:disabled{opacity:.3}
+  .sheet .players + .add + .plaque{margin-top:20px}
+
+  .pass-call{margin-top:14px;font-family:'Rye',serif;font-size:clamp(18px,5.4vw,24px);color:var(--flame);
+    text-shadow:0 2px 0 #3a1c04,0 0 18px rgba(255,140,40,.4)}
+  .pass-call:empty{display:none}
+
+  .scores{list-style:none;margin:18px auto 0;width:min(320px,84vw);display:grid;gap:6px}
+  .scores li{display:grid;grid-template-columns:1fr auto 28px;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;
+    background:rgba(40,20,6,.7);border:1px solid rgba(255,200,130,.12);text-align:left}
+  .scores li.hit{border-color:rgba(255,90,50,.7);box-shadow:0 0 18px rgba(255,80,40,.3)}
+  .scores .who{font-size:18px;color:#f3dcae;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .scores .num{font-family:'Rye',serif;font-size:20px;color:var(--gold);text-align:right}
+  .scores .marks{display:flex;gap:3px;align-items:center;height:22px}
+  .scores .marks i{display:block;width:3px;height:20px;border-radius:2px;background:#e9cf9f;box-shadow:0 1px 0 #000}
+  .scores .marks i.slash{width:3px;transform:rotate(-60deg) scaleY(1.5);margin-left:-14px;margin-right:6px;background:#ff8a5a}
+  .scores .clean{color:var(--muted)}
+
+  .toggle{display:flex;gap:12px;align-items:flex-start;margin-top:16px;cursor:pointer;font-size:15px;line-height:1.35;color:#e4c898}
+  .toggle input{position:absolute;opacity:0;pointer-events:none}
+  .toggle .track{flex:none;width:44px;height:26px;border-radius:13px;background:rgba(20,9,3,.9);border:1px solid rgba(255,200,130,.3);
+    position:relative;transition:background .2s;margin-top:2px}
+  .toggle .track::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#c9a372;transition:transform .2s, background .2s}
+  .toggle input:checked + .track{background:#8a4518}
+  .toggle input:checked + .track::after{transform:translateX(18px);background:#ffd28a}
+  .toggle input:focus-visible + .track{outline:3px solid var(--flame);outline-offset:2px}
+  .toggle b{font-family:'Rye',serif;font-weight:400;color:var(--gold)}
+  .rules-actions{display:flex;gap:10px;margin-top:6px}
+  .rules-actions .plaque{flex:1;width:auto;font-size:16px}
+
+  button.callbar-value{background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:8px;
+    border-bottom:1px dashed rgba(255,200,130,.35)}
+  .picker{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin:18px auto 0;width:min(360px,88vw)}
+  .chip{aspect-ratio:1;border-radius:10px;border:1px solid rgba(255,200,130,.2);cursor:pointer;
+    font-family:'Rye',serif;font-size:clamp(14px,4vw,18px);color:#f3dcae;background:rgba(50,26,10,.85)}
+  .chip.pasch{background:rgba(90,50,14,.9);color:#ffe1a0}
+  .chip.mia{background:linear-gradient(180deg,#b5692c,#6a2c0a);color:#fff3cf;font-size:clamp(11px,3vw,14px)}
+  .chip.sel{outline:2px solid var(--flame);outline-offset:1px;box-shadow:0 0 14px rgba(255,150,50,.5)}
+  .chip:disabled{opacity:.18;pointer-events:none}
+  .picker-legend{display:flex;justify-content:center;gap:14px;margin-top:10px;font-size:14px;color:var(--muted)}
+  .picker-legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  .lg-n::before{background:rgba(50,26,10,.95);border:1px solid rgba(255,200,130,.3)}
+  .lg-p::before{background:rgba(90,50,14,.95)}
+  .lg-m::before{background:#b5692c}
+
   #nogl{position:fixed;inset:0;display:grid;place-items:center;padding:30px;text-align:center;background:var(--night);z-index:50;font-size:18px}
   #nogl[hidden]{display:none}
 
@@ -235,18 +345,19 @@
 </head>
 <body>
 
-<canvas id="scene" aria-label="A leather dice cup on a tree stump by the fire"></canvas>
+<canvas id="scene" aria-label="Ein Lederbecher auf einem Baumstumpf am Lagerfeuer"></canvas>
 <div id="glow"></div>
 <div id="vignette"></div>
 
 <div id="ui">
   <header id="top">
-    <button class="icon-btn" id="rulesBtn" aria-label="How to play">?</button>
+    <button class="icon-btn" id="rulesBtn" aria-label="Spielregeln">?</button>
     <div>
-      <h1>Fireside Bluff</h1>
-      <div class="seat" id="seat">Player 1’s cup</div>
+      <h1>Schummelmäx</h1>
+      <button class="seat" id="seat" aria-label="Punktestand zeigen"></button>
+      <div class="pill last-call" id="lastCallPill"></div>
     </div>
-    <button class="icon-btn" id="soundBtn" aria-label="Mute sound">
+    <button class="icon-btn" id="soundBtn" aria-label="Ton aus">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/>
         <g class="waves"><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></g>
@@ -258,19 +369,36 @@
   <div id="callout" aria-live="polite"><div class="big" id="calloutBig"></div><div class="small" id="calloutSmall"></div></div>
 
   <div id="bottom">
-    <div class="hint" id="hint">Gathering kindling…</div>
+    <div id="callBar">
+      <div class="callbar-beat" id="callBeat">Eröffnung – freie Wahl</div>
+      <div class="callbar-stepper">
+        <button class="stepper" id="callMinus" aria-label="Niedriger ansagen">−</button>
+        <button class="callbar-value" id="callValueBtn" aria-label="Ansage aus Liste wählen"><div id="callValue">31</div><div class="callbar-word" id="callWord">Einunddreißig</div></button>
+        <button class="stepper" id="callPlus" aria-label="Höher ansagen">+</button>
+      </div>
+      <button class="plaque primary" id="callConfirm"><span>Ansagen</span></button>
+    </div>
+    <div class="hint" id="hint">Sammle Brennholz …</div>
     <div class="actions">
-      <button class="plaque primary" id="rollBtn">
+      <button class="plaque primary" id="rollBtn" hidden>
         <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="#f2cf8f"/><circle cx="15.5" cy="15.5" r="1.2" fill="#f2cf8f"/><circle cx="12" cy="12" r="1.2" fill="#f2cf8f"/></svg>
-        <span>Roll</span>
+        <span>Würfeln</span>
       </button>
-      <button class="plaque" id="revealBtn">
+      <button class="plaque" id="revealBtn" hidden>
+        <svg viewBox="0 0 24 24"><path d="M5 20h14"/><path d="M7 16l1.5-9h7L17 16"/><path d="M12 3v2"/><path d="M4.5 6.5l1.5 1"/><path d="M19.5 6.5l-1.5 1"/></svg>
+        <span>Aufdecken!</span>
+      </button>
+      <button class="plaque primary" id="peekBtn" hidden>
         <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-        <span>Reveal</span>
+        <span>Heimlich anschauen</span>
       </button>
-      <button class="plaque" id="passBtn">
-        <svg viewBox="0 0 24 24"><path d="M4 12h13"/><path d="M13 7l5 5-5 5"/><path d="M20 5v14"/></svg>
-        <span>Pass</span>
+      <button class="plaque" id="blindBtn" hidden>
+        <svg viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.6A10 10 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a17 17 0 0 1-3.2 3.9"/><path d="M6.2 6.9C3.6 8.7 2 12 2 12s3.6 6.5 10 6.5a9.6 9.6 0 0 0 4.4-1"/></svg>
+        <span>Blind nachwürfeln</span>
+      </button>
+      <button class="plaque primary" id="nextBtn" hidden>
+        <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3"/><path d="M6 21v-4h4"/></svg>
+        <span>Neue Runde</span>
       </button>
     </div>
   </div>
@@ -279,36 +407,63 @@
 <div class="sheet open" data-sheet="start">
   <div class="card">
     <div class="campfire"><div class="log a"></div><div class="log b"></div><div class="fl f1"></div><div class="fl f2"></div><div class="fl f3"></div></div>
-    <h2>Fireside Bluff</h2>
-    <p>Two dice, one leather cup, and a circle of liars. Pass the phone around the fire.</p>
-    <button class="plaque primary" id="startBtn" disabled><span>Gathering kindling…</span></button>
+    <h2>Schummelmäx</h2>
+    <p>Zwei Würfel, ein Lederbecher und eine Runde Schwindler. Wer spielt mit?</p>
+    <ol class="players" id="playerList"></ol>
+    <button class="add" id="addPlayer">+ Mitspieler</button>
+    <button class="plaque primary" id="startBtn" disabled><span>Sammle Brennholz …</span></button>
   </div>
 </div>
 
 <div class="sheet" data-sheet="pass">
   <div class="card">
-    <div class="eyebrow">Hand the cup to</div>
-    <div class="big-name" id="passTo">Player 2</div>
-    <p>Eyes off the screen until it’s in their hands.</p>
-    <button class="plaque primary" id="takeBtn"><span>I’ve got the cup</span></button>
+    <div class="eyebrow" id="passEyebrow">Gib den Becher an</div>
+    <div class="big-name" id="passTo">Spieler 2</div>
+    <div class="pass-call" id="passCall"></div>
+    <p id="passNote">Nicht hinschauen, bis der Becher bei dir ist.</p>
+    <button class="plaque primary" id="takeBtn"><span>Ich hab den Becher</span></button>
+  </div>
+</div>
+
+<div class="sheet" data-sheet="scores">
+  <div class="card">
+    <h2>Strafpunkte</h2>
+    <ol class="scores" id="scoreList"></ol>
+    <p id="scoreNote"></p>
+    <button class="plaque primary" id="scoreBtn"><span>Los geht’s</span></button>
+  </div>
+</div>
+
+<div class="sheet" data-sheet="picker">
+  <div class="card">
+    <h2>Deine Ansage</h2>
+    <div class="picker" id="pickerGrid"></div>
+    <div class="picker-legend"><span class="lg-n">Normal</span><span class="lg-p">Pasch</span><span class="lg-m">Mäxchen</span></div>
+    <button class="plaque" id="pickerClose"><span>Abbrechen</span></button>
   </div>
 </div>
 
 <div class="sheet" data-sheet="rules">
   <div class="card rules">
-    <h2>How to bluff</h2>
+    <h2>So wird geschummelt</h2>
     <ol>
-      <li>Roll, then <b>Reveal</b> to peek — keep the screen to yourself.</li>
-      <li>Announce a score. True or a lie, it must beat the last call.</li>
-      <li><b>Pass</b> the cup hidden. The next player either believes you and rolls, or calls the bluff with Reveal.</li>
-      <li>Caught lying, or wrongly calling a bluff? You lose the round.</li>
+      <li>Würfle verdeckt und schau <b>heimlich</b> unter den Becher – nur du.</li>
+      <li>Sag einen Wert an. Wahr oder gelogen – er muss <b>höher</b> sein als die letzte Ansage.</li>
+      <li>Gib den Becher verdeckt weiter. Der Nächste <b>glaubt</b> dir und würfelt selbst – oder <b>deckt auf</b>.</li>
+      <li>Beim Aufdecken bekommt, wer im Unrecht war, einen <b>Strafpunkt</b> – bei Mäxchen zwei. Wer verliert, eröffnet die nächste Runde.</li>
+      <li>Wer ein Mäxchen glaubt, muss selbst Mäxchen ansagen.</li>
     </ol>
-    <div class="rank"><b>MIA</b> (2·1) beats all → doubles <b>66</b> down to <b>11</b> → the rest, high die first: <b>65</b>, <b>64</b> … <b>31</b>.</div>
-    <button class="plaque" id="rulesClose"><span>Back to the fire</span></button>
+    <div class="rank"><b>Mäxchen</b> (21) schlägt alles → <b>Pasch</b> 66 bis 11 → der Rest, hohe Zahl zuerst: <b>65</b>, <b>64</b> … <b>31</b>.</div>
+    <label class="toggle"><input type="checkbox" id="blindToggle"><span class="track"></span>
+      <span class="toggle-text"><b>Blind nachwürfeln</b><br>Einmal pro Zug nach dem Anschauen neu würfeln – und unbesehen ansagen.</span></label>
+    <div class="rules-actions">
+      <button class="plaque" id="newGameBtn"><span>Neues Spiel</span></button>
+      <button class="plaque primary" id="rulesClose"><span>Zurück ans Feuer</span></button>
+    </div>
   </div>
 </div>
 
-<div id="nogl" hidden>This fire needs WebGL, which this browser has turned off.</div>
+<div id="nogl" hidden>Dieses Feuer braucht WebGL – das ist in diesem Browser ausgeschaltet.</div>
 
 <script type="module" src="game.min.js"></script>
 <script>

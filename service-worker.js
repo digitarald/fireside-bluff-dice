@@ -1,7 +1,7 @@
 // Fireside Bluff — service worker
 // App shell is served from cache instantly (works offline by the fire) and
 // refreshed in the background, so a new deploy shows up on the next launch.
-const CACHE_NAME = 'fireside-bluff-v2';
+const CACHE_NAME = 'fireside-bluff-v3';
 
 const APP_SHELL = [
   './',

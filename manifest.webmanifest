@@ -1,7 +1,7 @@
 {
-  "name": "Fireside Bluff",
-  "short_name": "Fireside Bluff",
-  "description": "A 3D dice-bluffing game for the campfire. Shake the leather cup, call your roll, and decide whether to reveal, roll again, or pass it on hidden.",
+  "name": "Schummelmäx – Mäxchen am Lagerfeuer",
+  "short_name": "Schummelmäx",
+  "description": "Mäxchen am Lagerfeuer: Becher schütteln, heimlich schauen, ansagen – und hoffen, dass keiner aufdeckt.",
   "start_url": "./index.html",
   "scope": "./",
   "id": "./",
@@ -13,7 +13,7 @@
   "orientation": "portrait",
   "background_color": "#0b0604",
   "theme_color": "#0b0604",
-  "lang": "en",
+  "lang": "de",
   "categories": [
     "games",
     "entertainment"

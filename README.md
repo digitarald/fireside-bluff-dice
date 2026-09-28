@@ -1,20 +1,24 @@
-# Fireside Bluff
+# Schummelmäx – Mäxchen am Lagerfeuer
 
-A 3D dice-bluffing game for playing around the fire on one shared phone.
+Mäxchen (Meiern, Mäxle, Schummelmäx) als 3D-Spiel für ein Handy, das in der Runde herumgereicht wird.
 
-Shake a leather cup on a tree stump, slam it down, and decide: **Reveal**, **Roll** again, or **Pass** it on hidden. Built with three.js — firelit shadows, drifting embers, tilt parallax, shake-to-roll, synthesized dice sounds and fire crackle, haptics, and a special celebration for Mia (2·1).
+**Ablauf:** Würfeln → heimlich unter den Becher schauen → Wert ansagen (wahr oder gelogen, immer höher als die letzte Ansage) → verdeckt weitergeben. Der Nächste glaubt und würfelt selbst – oder deckt auf. Wer im Unrecht war, bekommt einen Strafpunkt (bei Mäxchen zwei) und eröffnet die nächste Runde. Nach einem geglaubten Mäxchen geht nur noch Mäxchen.
 
-Play: https://digitarald.github.io/fireside-bluff-dice/ — "Add to Home Screen" to install it as an offline app.
+**Rangfolge:** Mäxchen (21) › Pasch 66 … 11 › 65, 64 … 31.
 
-## Battery
+**Variante:** „Blind nachwürfeln“ (in den Regeln einschaltbar) – einmal pro Zug nach dem Anschauen neu würfeln und unbesehen ansagen.
 
-The renderer only runs at full rate while something is moving, drops to ~30fps when idle, and stops entirely after a minute untouched or while a sheet covers the table (audio suspends too). Shadows re-render only when the cup or dice move, and pixel ratio is capped on phones.
+Spielen: https://digitarald.github.io/fireside-bluff-dice/ – „Zum Home-Bildschirm“ hinzufügen, dann läuft es auch offline.
 
-## Develop
+## Akku
+
+Volle Bildrate nur, während sich etwas bewegt; im Leerlauf ~30 fps; nach einer Minute ohne Berührung oder hinter einem Overlay stoppt das Rendern ganz (Ton pausiert mit). Schatten werden nur neu berechnet, wenn Becher oder Würfel sich bewegen.
+
+## Entwickeln
 
 ```
 npm install
-npm run build   # bundles src/game.js + three.js into game.min.js
+npm run build   # bündelt src/game.js + three.js zu game.min.js
 ```
 
-Bump `CACHE_NAME` in `service-worker.js` when shipping changes.
+Bei Änderungen `CACHE_NAME` in `service-worker.js` hochzählen.
