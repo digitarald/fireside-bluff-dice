@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Fireside Bluff Dice</title>
+<meta name="description" content="A skeuomorphic dice-bluffing game for the campfire. Shake the leather cup, call your roll, and decide whether to reveal, roll again, or pass it on hidden.">
+<meta name="theme-color" content="#241305">
+<meta name="color-scheme" content="dark">
+
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fireside Bluff">
+<meta name="mobile-web-app-capable" content="yes">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rye&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --char:#150d07;
+    --plank:#4a2f18;
+    --plank-hi:#6b4426;
+    --ember:#ff8c3b;
+    --flame:#ffc46b;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  html{ height:-webkit-fill-available; }
+  body{
+    font-family:'IM Fell English',serif;
+    background:#0c0704;
+    color:#f0dcb8;
+    user-select:none;
+    display:flex;flex-direction:column;align-items:center;
+    height:100vh;
+    height:-webkit-fill-available;
+    padding-top:env(safe-area-inset-top);
+    padding-bottom:env(safe-area-inset-bottom);
+    padding-left:env(safe-area-inset-left);
+    padding-right:env(safe-area-inset-right);
+    overscroll-behavior:none;
+  }
+
+  /* ---------- wooden table ---------- */
+  .table{
+    position:fixed;inset:0;
+    background:
+      repeating-linear-gradient(90deg,
+        rgba(0,0,0,.28) 0 3px, transparent 3px 96px),
+      repeating-linear-gradient(0deg,
+        rgba(255,220,160,.03) 0 2px, transparent 2px 7px),
+      linear-gradient(180deg,#3a2412 0%, #4d3118 45%, #2b1a0c 100%);
+  }
+  /* wood grain streaks */
+  .table::before{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(220px 26px at 18% 30%, rgba(0,0,0,.30), transparent 70%),
+      radial-gradient(300px 30px at 70% 55%, rgba(0,0,0,.25), transparent 70%),
+      radial-gradient(260px 24px at 40% 78%, rgba(0,0,0,.28), transparent 70%),
+      radial-gradient(180px 20px at 85% 20%, rgba(0,0,0,.22), transparent 70%);
+    mix-blend-mode:multiply;
+  }
+
+  /* ---------- fire glow ---------- */
+  .fire{
+    position:fixed;inset:0;pointer-events:none;z-index:2;
+    background:
+      radial-gradient(120% 75% at 50% 115%, rgba(255,132,40,.38), rgba(255,90,20,.14) 45%, transparent 70%);
+    animation:flicker 2.8s infinite;
+  }
+  .fire.b{
+    background:radial-gradient(90% 60% at 50% 115%, rgba(255,190,90,.20), transparent 65%);
+    animation:flicker 1.7s infinite reverse;
+  }
+  .vignette{
+    position:fixed;inset:0;pointer-events:none;z-index:3;
+    background:radial-gradient(120% 100% at 50% 45%, transparent 40%, rgba(0,0,0,.75) 100%);
+  }
+  @keyframes flicker{
+    0%,100%{opacity:.85}
+    18%{opacity:1}
+    32%{opacity:.72}
+    47%{opacity:.95}
+    63%{opacity:.68}
+    80%{opacity:.9}
+  }
+  .spark{
+    position:fixed;bottom:-10px;width:4px;height:4px;border-radius:50%;
+    background:radial-gradient(circle,#ffd27a,#ff7a1e 70%,transparent);
+    pointer-events:none;z-index:2;opacity:0;
+    animation:rise linear infinite;
+  }
+  @keyframes rise{
+    0%{transform:translateY(0) translateX(0);opacity:0}
+    10%{opacity:.9}
+    100%{transform:translateY(-110vh) translateX(var(--drift));opacity:0}
+  }
+
+  /* ---------- layout ---------- */
+  header{z-index:5;text-align:center;padding:18px 12px 0}
+  h1{
+    font-family:'Rye',serif;font-weight:400;
+    font-size:clamp(26px,7vw,40px);letter-spacing:.04em;
+    color:#f6d693;
+    text-shadow:0 2px 0 #5a3110, 0 4px 10px rgba(0,0,0,.8), 0 0 24px rgba(255,140,40,.35);
+  }
+  .turn{
+    font-style:italic;font-size:15px;color:#d8b073;margin-top:2px;
+    text-shadow:0 1px 3px rgba(0,0,0,.8);
+  }
+
+  .stage{
+    z-index:5;flex:1;width:100%;max-width:440px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    position:relative;
+  }
+
+  /* ---------- dice ---------- */
+  .dice-row{
+    display:flex;gap:26px;
+    position:relative;z-index:4;
+    transform:translateY(26px);
+    transition:transform .5s cubic-bezier(.34,1.4,.5,1);
+    filter:drop-shadow(0 14px 10px rgba(0,0,0,.55));
+  }
+  .revealed .dice-row{transform:translate(34px,26px)}
+  .die{
+    width:76px;height:76px;border-radius:14px;position:relative;
+    background:
+      linear-gradient(135deg,#fffdf4 0%, #f3e9d2 45%, #dccfae 100%);
+    box-shadow:
+      inset 2px 2px 4px rgba(255,255,255,.9),
+      inset -3px -4px 8px rgba(120,95,55,.45),
+      0 3px 4px rgba(0,0,0,.4);
+    opacity:0;transform:scale(.9);
+    transition:opacity .28s ease, transform .28s ease;
+  }
+  .revealed .die{opacity:1;transform:scale(1)}
+  .die.tumble{animation:tumble .12s steps(1) infinite}
+  @keyframes tumble{50%{transform:rotate(8deg) scale(1.02)}}
+  .pip{
+    position:absolute;width:15px;height:15px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #4a423a, #14100c 70%);
+    box-shadow:inset 0 -2px 2px rgba(255,255,255,.15), 0 1px 1px rgba(255,255,255,.5);
+    transform:translate(-50%,-50%);
+  }
+
+  .callout{
+    height:34px;margin-bottom:26px;font-size:clamp(17px,4.6vw,21px);
+    font-style:italic;color:#ffd88f;text-shadow:0 0 14px rgba(255,150,40,.5),0 2px 4px #000;
+    opacity:0;transition:opacity .3s;text-align:center;position:relative;z-index:7;
+  }
+  .callout.show{opacity:1}
+
+  /* ---------- leather cup ---------- */
+  .cup-zone{position:relative;width:220px;height:250px;display:flex;justify-content:center}
+  .cup{
+    position:absolute;bottom:0;width:170px;height:200px;
+    transform-origin:80% 100%;
+    transition:transform .5s cubic-bezier(.34,1.4,.5,1);
+    z-index:6;cursor:pointer;
+  }
+  .cup-body{
+    position:absolute;inset:0;
+    border-radius:22px 22px 46% 46% / 18px 18px 12% 12%;
+    background:
+      radial-gradient(120% 60% at 30% 12%, rgba(255,205,130,.25), transparent 55%),
+      repeating-linear-gradient(93deg, rgba(0,0,0,.10) 0 2px, transparent 2px 11px),
+      linear-gradient(90deg,#2e1a0c 0%, #6b4223 22%, #8a5a30 50%, #5c3819 78%, #241206 100%);
+    box-shadow:
+      inset 0 -14px 20px rgba(0,0,0,.55),
+      inset 0 6px 8px rgba(255,220,160,.18),
+      0 16px 18px rgba(0,0,0,.6);
+  }
+  /* rim band + stitching */
+  .cup-body::before{
+    content:"";position:absolute;left:0;right:0;top:0;height:34px;
+    border-radius:22px 22px 8px 8px;
+    background:linear-gradient(90deg,#1d0f05,#7a4d28 30%,#9c6a3a 50%,#5a3517 75%,#170b03);
+    box-shadow:0 3px 5px rgba(0,0,0,.5), inset 0 2px 3px rgba(255,225,170,.3);
+  }
+  .cup-body::after{
+    content:"";position:absolute;left:10px;right:10px;top:40px;height:0;
+    border-top:2px dashed rgba(255,215,150,.4);
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.7));
+  }
+  .cup-brand{
+    position:absolute;top:88px;left:50%;transform:translateX(-50%) rotate(-2deg);
+    font-family:'Rye',serif;font-size:15px;color:rgba(30,15,5,.85);
+    text-shadow:0 1px 0 rgba(255,210,150,.25);
+    letter-spacing:.08em;
+  }
+  .cup.lifted{
+    transform:translate(-82px,-4px) rotate(-102deg) scale(.84);
+    z-index:2;
+  }
+  .cup.shaking{animation:shake .09s linear infinite}
+  @keyframes shake{
+    0%{transform:translate(-7px,-3px) rotate(-6deg)}
+    25%{transform:translate(6px,-9px) rotate(5deg)}
+    50%{transform:translate(-5px,-5px) rotate(-4deg)}
+    75%{transform:translate(7px,-8px) rotate(6deg)}
+    100%{transform:translate(-6px,-2px) rotate(-5deg)}
+  }
+  .cup.slam{animation:slam .3s ease-out}
+  @keyframes slam{
+    0%{transform:translateY(-90px) rotate(-8deg)}
+    70%{transform:translateY(3px)}
+    100%{transform:translateY(0)}
+  }
+  .cup-shadow{
+    position:absolute;bottom:-8px;width:180px;height:26px;border-radius:50%;
+    background:radial-gradient(ellipse,rgba(0,0,0,.6),transparent 70%);
+    z-index:1;transition:opacity .4s, transform .4s;
+  }
+  .lifted-state .cup-shadow{opacity:.25;transform:scale(.8)}
+
+  .hint{
+    z-index:5;font-style:italic;font-size:14px;color:#c49a63;height:20px;
+    text-shadow:0 1px 3px #000;margin-bottom:8px;text-align:center;
+  }
+
+  /* ---------- buttons ---------- */
+  .actions{
+    z-index:5;display:flex;gap:12px;padding:0 16px 26px;width:100%;max-width:440px;
+  }
+  button.wood{
+    flex:1;padding:16px 6px 14px;border:none;border-radius:12px;
+    font-family:'Rye',serif;font-size:clamp(14px,4vw,17px);letter-spacing:.03em;
+    color:#f6dfae;cursor:pointer;
+    background:
+      repeating-linear-gradient(88deg, rgba(0,0,0,.12) 0 2px, transparent 2px 10px),
+      linear-gradient(180deg,#7c4f28 0%, #5a3617 55%, #3a2009 100%);
+    border:2px solid #211004;
+    box-shadow:
+      inset 0 2px 3px rgba(255,225,170,.35),
+      inset 0 -6px 8px rgba(0,0,0,.45),
+      0 6px 10px rgba(0,0,0,.55);
+    text-shadow:0 2px 2px rgba(0,0,0,.8);
+    transition:transform .08s, box-shadow .08s, opacity .2s;
+  }
+  button.wood:active{
+    transform:translateY(3px);
+    box-shadow:inset 0 3px 6px rgba(0,0,0,.6), 0 2px 4px rgba(0,0,0,.5);
+  }
+  button.wood:disabled{opacity:.35;pointer-events:none}
+  button.wood:focus-visible{outline:3px solid #ffc46b;outline-offset:2px}
+  button.wood.hot{
+    background:
+      repeating-linear-gradient(88deg, rgba(0,0,0,.1) 0 2px, transparent 2px 10px),
+      linear-gradient(180deg,#a8622a 0%, #83431a 55%, #55250a 100%);
+    box-shadow:
+      inset 0 2px 3px rgba(255,235,180,.5),
+      inset 0 -6px 8px rgba(0,0,0,.45),
+      0 6px 12px rgba(0,0,0,.6), 0 0 18px rgba(255,140,40,.35);
+  }
+
+  /* ---------- pass overlay ---------- */
+  .pass{
+    position:fixed;inset:0;z-index:20;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+    background:
+      radial-gradient(100% 80% at 50% 110%, rgba(255,120,30,.16), transparent 60%),
+      repeating-linear-gradient(93deg, rgba(0,0,0,.12) 0 2px, transparent 2px 12px),
+      linear-gradient(160deg,#241305,#120a03);
+    text-align:center;padding:30px;
+    opacity:0;pointer-events:none;transition:opacity .35s;
+  }
+  .pass.on{opacity:1;pointer-events:auto}
+  .pass h2{
+    font-family:'Rye',serif;font-weight:400;color:#f6d693;
+    font-size:clamp(24px,7vw,34px);
+    text-shadow:0 3px 0 #4a2708, 0 6px 14px #000;
+  }
+  .pass p{font-style:italic;color:#cfa268;max-width:290px;line-height:1.5}
+  .pass button{max-width:260px;width:100%;flex:none}
+
+  @media (prefers-reduced-motion: reduce){
+    .cup.shaking,.die.tumble,.fire,.fire.b,.spark{animation:none !important}
+  }
+</style>
+</head>
+<body>
+
+<div class="table"></div>
+<div class="fire"></div>
+<div class="fire b"></div>
+<div class="vignette"></div>
+
+<header>
+  <h1>Fireside Bluff</h1>
+  <div class="turn" id="turn">Player 1 holds the cup</div>
+</header>
+
+<main class="stage" id="stage">
+  <div class="callout" id="callout"></div>
+  <div class="cup-zone">
+    <div class="cup-shadow"></div>
+    <div class="dice-row" id="diceRow">
+      <div class="die" id="d1"></div>
+      <div class="die" id="d2"></div>
+    </div>
+    <div class="cup" id="cup" role="button" aria-label="Dice cup" tabindex="0">
+      <div class="cup-body"></div>
+      <div class="cup-brand">BLUFF &amp; CO.</div>
+    </div>
+  </div>
+</main>
+
+<div class="hint" id="hint">Shake the cup &mdash; call your number out loud.</div>
+
+<div class="actions">
+  <button class="wood hot" id="rollBtn">🎲 Roll</button>
+  <button class="wood" id="revealBtn">👁 Reveal</button>
+  <button class="wood" id="passBtn">🤝 Pass</button>
+</div>
+
+<div class="pass" id="pass">
+  <h2 id="passTitle">Hand it over</h2>
+  <p id="passText">Give the phone to the next player. No peeking at the fire&rsquo;s secrets.</p>
+  <button class="wood hot" id="readyBtn">Take the cup</button>
+</div>
+
+<script>
+(function(){
+  const cup = document.getElementById('cup');
+  const d = [document.getElementById('d1'), document.getElementById('d2')];
+  const rollBtn = document.getElementById('rollBtn');
+  const revealBtn = document.getElementById('revealBtn');
+  const passBtn = document.getElementById('passBtn');
+  const readyBtn = document.getElementById('readyBtn');
+  const passEl = document.getElementById('pass');
+  const passTitle = document.getElementById('passTitle');
+  const stage = document.getElementById('stage');
+  const callout = document.getElementById('callout');
+  const hint = document.getElementById('hint');
+  const turnEl = document.getElementById('turn');
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let values = [null, null];
+  let revealed = false;
+  let busy = false;
+  let player = 1;
+
+  /* ---------- pips ---------- */
+  const PIPS = {
+    1:[[50,50]],
+    2:[[27,27],[73,73]],
+    3:[[27,27],[50,50],[73,73]],
+    4:[[27,27],[73,27],[27,73],[73,73]],
+    5:[[27,27],[73,27],[50,50],[27,73],[73,73]],
+    6:[[27,25],[73,25],[27,50],[73,50],[27,75],[73,75]]
+  };
+  function paintDie(el, v){
+    el.innerHTML = '';
+    (PIPS[v]||[]).forEach(([x,y])=>{
+      const p = document.createElement('div');
+      p.className = 'pip';
+      p.style.left = x+'%'; p.style.top = y+'%';
+      el.appendChild(p);
+    });
+  }
+
+  /* ---------- sound (Web Audio, no files) ---------- */
+  let ctx = null;
+  function audio(){
+    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  // one dice "click" — short burst of filtered noise
+  function click(t, pitch, gainVal){
+    const c = audio();
+    const len = 0.03;
+    const buf = c.createBuffer(1, c.sampleRate*len, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<data.length;i++) data[i] = (Math.random()*2-1) * Math.pow(1-i/data.length, 2);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const bp = c.createBiquadFilter(); bp.type='bandpass';
+    bp.frequency.value = pitch; bp.Q.value = 1.4;
+    const g = c.createGain(); g.gain.value = gainVal;
+    src.connect(bp); bp.connect(g); g.connect(c.destination);
+    src.start(t);
+  }
+  function thud(t, freq, vol, dur){
+    const c = audio();
+    const o = c.createOscillator(); o.type='sine';
+    o.frequency.setValueAtTime(freq, t);
+    o.frequency.exponentialRampToValueAtTime(freq*0.4, t+dur);
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(t); o.stop(t+dur);
+  }
+  function rattleSound(duration){
+    const c = audio();
+    const t0 = c.currentTime + 0.02;
+    const clicks = 14 + Math.floor(Math.random()*6);
+    for(let i=0;i<clicks;i++){
+      const t = t0 + Math.random()*duration;
+      click(t, 1800 + Math.random()*2600, 0.25 + Math.random()*0.35);
+    }
+    // dice knocking cup walls
+    thud(t0 + duration*0.3, 300, 0.15, 0.06);
+    thud(t0 + duration*0.7, 260, 0.15, 0.06);
+  }
+  function slamSound(){
+    const c = audio();
+    const t = c.currentTime + 0.01;
+    thud(t, 130, 0.6, 0.16);
+    click(t+0.01, 900, 0.3);
+    click(t+0.02, 500, 0.25);
+  }
+  function liftSound(){
+    const c = audio();
+    const t = c.currentTime + 0.01;
+    click(t, 1200, 0.12);
+    click(t+0.05, 2200, 0.08);
+  }
+
+  /* ---------- state / UI ---------- */
+  function setButtons(){
+    rollBtn.disabled = busy;
+    revealBtn.disabled = busy || revealed || values[0]===null;
+    passBtn.disabled = busy || values[0]===null;
+    revealBtn.textContent = revealed ? '👁 Revealed' : '👁 Reveal';
+  }
+  function setHint(text){ hint.textContent = text; }
+
+  function comboName(a,b){
+    const hi = Math.max(a,b), lo = Math.min(a,b);
+    if(hi===2 && lo===1) return '⚡ MIA! The highest call of all!';
+    if(hi===lo) return `Doubles — ${hi} &amp; ${hi}!`;
+    return `You rolled ${hi}${lo}.`;
+  }
+
+  function roll(){
+    if(busy) return;
+    busy = true; setButtons();
+    callout.classList.remove('show');
+
+    // hide dice under cup if they were revealed
+    if(revealed){
+      hideDice();
+      slamSound();
+    }
+
+    const dur = reduceMotion ? 0.5 : 0.9;
+    rattleSound(dur);
+    if(!reduceMotion) cup.classList.add('shaking');
+    setHint('The bones are dancing…');
+
+    setTimeout(()=>{
+      cup.classList.remove('shaking');
+      if(!reduceMotion){
+        cup.classList.add('slam');
+        setTimeout(()=>cup.classList.remove('slam'), 320);
+      }
+      slamSound();
+      values = [1+Math.floor(Math.random()*6), 1+Math.floor(Math.random()*6)];
+      paintDie(d[0], values[0]);
+      paintDie(d[1], values[1]);
+      busy = false;
+      setButtons();
+      setHint('Call it out — then Reveal, Roll again, or Pass.');
+    }, dur*1000);
+  }
+
+  function reveal(){
+    if(busy || revealed || values[0]===null) return;
+    revealed = true;
+    liftSound();
+    cup.classList.add('lifted');
+    stage.classList.add('lifted-state');
+    document.querySelector('.cup-zone').classList.add('revealed');
+    callout.innerHTML = comboName(values[0], values[1]);
+    callout.classList.add('show');
+    setHint('Truth by firelight. Roll again, or Pass it on hidden.');
+    setButtons();
+  }
+
+  function hideDice(){
+    revealed = false;
+    cup.classList.remove('lifted');
+    stage.classList.remove('lifted-state');
+    document.querySelector('.cup-zone').classList.remove('revealed');
+    callout.classList.remove('show');
+  }
+
+  function pass(){
+    if(busy || values[0]===null) return;
+    if(revealed){ hideDice(); slamSound(); }
+    player++;
+    passTitle.textContent = 'Hand it over';
+    passEl.classList.add('on');
+  }
+
+  readyBtn.addEventListener('click', ()=>{
+    passEl.classList.remove('on');
+    turnEl.textContent = 'Player ' + player + ' holds the cup';
+    setHint('Believe the call? Reveal. Feeling bold? Roll.');
+    setButtons();
+  });
+
+  rollBtn.addEventListener('click', roll);
+  revealBtn.addEventListener('click', reveal);
+  passBtn.addEventListener('click', pass);
+  cup.addEventListener('click', ()=>{ revealed ? null : reveal(); });
+  cup.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' ') reveal(); });
+
+  /* ---------- floating sparks ---------- */
+  if(!reduceMotion){
+    for(let i=0;i<9;i++){
+      const s = document.createElement('div');
+      s.className = 'spark';
+      s.style.left = (5 + Math.random()*90) + 'vw';
+      s.style.setProperty('--drift', (Math.random()*80-40)+'px');
+      s.style.animationDuration = (5 + Math.random()*6) + 's';
+      s.style.animationDelay = (Math.random()*7) + 's';
+      document.body.appendChild(s);
+    }
+  }
+
+  setButtons();
+
+  // lock the viewport against pull-to-refresh / rubber-banding while playing
+  document.addEventListener('touchmove', function(e){
+    if(e.touches.length > 1) return;
+  }, {passive:true});
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+    });
+  }
+})();
+</script>
+</body>
+</html>
