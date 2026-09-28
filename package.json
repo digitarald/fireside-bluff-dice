@@ -1,0 +1,12 @@
+{
+  "name": "fireside-bluff-dice",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/game.js --bundle --minify --format=esm --target=es2020 --outfile=game.min.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "three": "^0.186.1"
+  }
+}

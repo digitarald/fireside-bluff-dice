@@ -1,17 +1,23 @@
 {
-  "name": "Fireside Bluff Dice",
+  "name": "Fireside Bluff",
   "short_name": "Fireside Bluff",
-  "description": "A skeuomorphic dice-bluffing game for the campfire. Shake the leather cup, call your roll, and decide whether to reveal, roll again, or pass it on hidden.",
+  "description": "A 3D dice-bluffing game for the campfire. Shake the leather cup, call your roll, and decide whether to reveal, roll again, or pass it on hidden.",
   "start_url": "./index.html",
   "scope": "./",
   "id": "./",
   "display": "standalone",
-  "display_override": ["standalone", "fullscreen"],
+  "display_override": [
+    "standalone",
+    "fullscreen"
+  ],
   "orientation": "portrait",
-  "background_color": "#0c0704",
-  "theme_color": "#241305",
+  "background_color": "#0b0604",
+  "theme_color": "#0b0604",
   "lang": "en",
-  "categories": ["games", "entertainment"],
+  "categories": [
+    "games",
+    "entertainment"
+  ],
   "icons": [
     {
       "src": "icons/icon-192.png",

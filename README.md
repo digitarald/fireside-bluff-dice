@@ -1,9 +1,20 @@
-# Fireside Bluff Dice
+# Fireside Bluff
 
-A skeuomorphic dice-bluffing game for playing around the fire, on one shared phone.
+A 3D dice-bluffing game for playing around the fire on one shared phone.
 
-Roll two dice under a leather cup, then decide: **reveal**, **roll again**, or **pass it on** hidden to the next player. Every roll shakes and clatters with real sound so the whole circle knows a roll happened, even with their eyes on the fire.
+Shake a leather cup on a tree stump, slam it down, and decide: **Reveal**, **Roll** again, or **Pass** it on hidden. Built with three.js — firelit shadows, drifting embers, tilt parallax, shake-to-roll, synthesized dice sounds and fire crackle, haptics, and a special celebration for Mia (2·1).
 
-Installable as a PWA — open it on your phone and "Add to Home Screen" for a full-screen, offline-capable app icon.
+Play: https://digitarald.github.io/fireside-bluff-dice/ — "Add to Home Screen" to install it as an offline app.
 
-Play it live: https://digitarald.github.io/fireside-bluff-dice/
+## Battery
+
+The renderer only runs at full rate while something is moving, drops to ~30fps when idle, and stops entirely after a minute untouched or while a sheet covers the table (audio suspends too). Shadows re-render only when the cup or dice move, and pixel ratio is capped on phones.
+
+## Develop
+
+```
+npm install
+npm run build   # bundles src/game.js + three.js into game.min.js
+```
+
+Bump `CACHE_NAME` in `service-worker.js` when shipping changes.
